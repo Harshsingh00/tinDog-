@@ -1,0 +1,687 @@
+import React, { useState, useEffect } from "react";
+import "./App.css";
+
+const API = "http://localhost:3001";
+
+const initialForm = {
+  firstName: "",
+  lastName: "",
+  age: "",
+  email: "",
+  departmentId: "",
+  designationId: "",
+  joiningDate: "",
+};
+
+function App() {
+  const [employees, setEmployees] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [filteredDesignations, setFilteredDesignations] = useState([]);
+  const [form, setForm] = useState(initialForm);
+  const [editId, setEditId] = useState(null);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState(""); // "success" or "error"
+  const [loading, setLoading] = useState(false);
+
+  // ─── Fetch all data on load ───────────────────────────────────────
+  useEffect(() => {
+    fetchEmployees();
+    fetchDepartments();
+    fetchDesignations();
+  }, []);
+
+  // ─── When department changes, filter designations ─────────────────
+  useEffect(() => {
+    if (form.departmentId) {
+      const filtered = designations.filter(
+        (d) => d.departmentId === parseInt(form.departmentId)
+      );
+      setFilteredDesignations(filtered);
+      // Reset designation if it doesn't belong to new department
+      if (
+        form.designationId &&
+        !filtered.find((d) => d.id === parseInt(form.designationId))
+      ) {
+        setForm((prev) => ({ ...prev, designationId: "" }));
+      }
+    } else {
+      setFilteredDesignations([]);
+    }
+  }, [form.departmentId, designations]);
+
+  const showMessage = (msg, type = "success") => {
+    setMessage(msg);
+    setMessageType(type);
+    setTimeout(() => setMessage(""), 3000);
+  };
+
+  // ─── API Calls ────────────────────────────────────────────────────
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API}/employees`);
+      const data = await res.json();
+      setEmployees(data);
+    } catch (err) {
+      showMessage("Failed to load employees", "error");
+    }
+  };
+
+  const fetchDepartments = async () => {
+    try {
+      const res = await fetch(`${API}/departments`);
+      const data = await res.json();
+      setDepartments(data);
+    } catch (err) {
+      showMessage("Failed to load departments", "error");
+    }
+  };
+
+  const fetchDesignations = async () => {
+    try {
+      const res = await fetch(`${API}/designations`);
+      const data = await res.json();
+      setDesignations(data);
+    } catch (err) {
+      showMessage("Failed to load designations", "error");
+    }
+  };
+
+  // ─── Form Handlers ────────────────────────────────────────────────
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    // Prepare payload — convert to correct types
+    const payload = {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      age: parseInt(form.age),
+      email: form.email,
+      departmentId: parseInt(form.departmentId),
+      designationId: parseInt(form.designationId),
+      joiningDate: new Date(form.joiningDate).toISOString(),
+    };
+
+    try {
+      if (editId) {
+        // UPDATE
+        const res = await fetch(`${API}/employees/${editId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Update failed");
+        }
+        showMessage("✅ Employee updated successfully!", "success");
+        setEditId(null);
+      } else {
+        // CREATE
+        const res = await fetch(`${API}/employees`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Add failed");
+        }
+        showMessage("✅ Employee added successfully!", "success");
+      }
+
+      setForm(initialForm);
+      fetchEmployees();
+    } catch (err) {
+      showMessage(`❌ ${err.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (emp) => {
+    setEditId(emp.id);
+    // Format date for input[type=datetime-local]
+    const dateVal = emp.joiningDate
+      ? new Date(emp.joiningDate).toISOString().slice(0, 16)
+      : "";
+    setForm({
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      age: emp.age,
+      email: emp.email,
+      departmentId: emp.departmentId,
+      designationId: emp.designationId,
+      joiningDate: dateVal,
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this employee?"))
+      return;
+    try {
+      const res = await fetch(`${API}/employees/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      showMessage("🗑️ Employee deleted", "success");
+      fetchEmployees();
+    } catch (err) {
+      showMessage("❌ Delete failed", "error");
+    }
+  };
+
+  const handleCancel = () => {
+    setEditId(null);
+    setForm(initialForm);
+  };
+
+  // ─── Helpers ──────────────────────────────────────────────────────
+  const getDeptName = (emp) => emp.Department?.name || "—";
+  const getDesigTitle = (emp) => emp.Designation?.title || "—";
+  const formatDate = (d) =>
+    d ? new Date(d).toLocaleDateString("en-IN") : "—";
+
+  // ─── Render ───────────────────────────────────────────────────────
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>Employee Management</h1>
+        <p>Manage your team with ease</p>
+      </header>
+
+      <div className="container">
+        {/* Toast Message */}
+        {message && (
+          <div className={`toast ${messageType}`}>{message}</div>
+        )}
+
+        {/* ── Form ── */}
+        <div className="card">
+          <h2>{editId ? "✏️ Edit Employee" : "➕ Add Employee"}</h2>
+          <form onSubmit={handleSubmit}>
+            <div className="form-row">
+              <div className="form-group">
+                <label>First Name</label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={form.firstName}
+                  onChange={handleChange}
+                  placeholder="Enter first name"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Last Name</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={form.lastName}
+                  onChange={handleChange}
+                  placeholder="Enter last name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Age</label>
+                <input
+                  type="number"
+                  name="age"
+                  value={form.age}
+                  onChange={handleChange}
+                  placeholder="18 - 60"
+                  min="18"
+                  max="60"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  placeholder="email@example.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Department</label>
+                <select
+                  name="departmentId"
+                  value={form.departmentId}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">-- Select Department --</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Designation</label>
+                <select
+                  name="designationId"
+                  value={form.designationId}
+                  onChange={handleChange}
+                  required
+                  disabled={!form.departmentId}
+                >
+                  <option value="">-- Select Designation --</option>
+                  {filteredDesignations.map((desig) => (
+                    <option key={desig.id} value={desig.id}>
+                      {desig.title}
+                    </option>
+                  ))}
+                </select>
+                {!form.departmentId && (
+                  <small>Select a department first</small>
+                )}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Joining Date & Time</label>
+                <input
+                  type="datetime-local"
+                  name="joiningDate"
+                  value={form.joiningDate}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-actions">
+              <button type="submit" className="btn-primary" disabled={loading}>
+                {loading
+                  ? "Saving..."
+                  : editId
+                  ? "Update Employee"
+                  : "Add Employee"}
+              </button>
+              {editId && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleCancel}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+
+        {/* ── Table ── */}
+        <div className="card">
+          <h2>👥 Employees ({employees.length})</h2>
+          {employees.length === 0 ? (
+            <p className="empty">No employees found. Add one above!</p>
+          ) : (
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Age</th>
+                    <th>Email</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Joining Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((emp, i) => (
+                    <tr key={emp.id}>
+                      <td>{i + 1}</td>
+                      <td>
+                        {emp.firstName} {emp.lastName}
+                      </td>
+                      <td>{emp.age}</td>
+                      <td>{emp.email}</td>
+                      <td>
+                        <span className="badge dept">{getDeptName(emp)}</span>
+                      </td>
+                      <td>
+                        <span className="badge desig">
+                          {getDesigTitle(emp)}
+                        </span>
+                      </td>
+                      <td>{formatDate(emp.joiningDate)}</td>
+                      <td>
+                        <button
+                          className="btn-edit"
+                          onClick={() => handleEdit(emp)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn-delete"
+                          onClick={() => handleDelete(emp.id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+
+
+/* ── Reset & Base ──────────────────────────────────────────────── */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a2e;
+  min-height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.app-header {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  color: white;
+  text-align: center;
+  padding: 32px 20px;
+}
+
+.app-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.app-header p {
+  margin-top: 6px;
+  font-size: 0.95rem;
+  opacity: 0.75;
+}
+
+/* ── Container ───────────────────────────────────────────────────── */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────── */
+.toast {
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.toast.success {
+  background: #d1fae5;
+  color: #065f46;
+  border-left: 4px solid #10b981;
+}
+
+.toast.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-left: 4px solid #ef4444;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Card ────────────────────────────────────────────────────────── */
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.card h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0f3460;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f0f2f5;
+}
+
+/* ── Form ────────────────────────────────────────────────────────── */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group select {
+  padding: 10px 14px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  color: #1a1a2e;
+  background: #fafafa;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  border-color: #0f3460;
+  box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.1);
+  background: white;
+}
+
+.form-group select:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+  color: #9ca3af;
+}
+
+.form-group small {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #0f3460, #16213e);
+  color: white;
+  border: none;
+  padding: 11px 28px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: white;
+  color: #374151;
+  border: 1.5px solid #d1d5db;
+  padding: 11px 24px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover {
+  background: #f3f4f6;
+}
+
+/* ── Table ───────────────────────────────────────────────────────── */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+thead tr {
+  background: #f8fafc;
+}
+
+thead th {
+  text-align: left;
+  padding: 12px 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+tbody tr {
+  border-bottom: 1px solid #f0f2f5;
+  transition: background 0.15s;
+}
+
+tbody tr:hover {
+  background: #f8fafc;
+}
+
+tbody td {
+  padding: 13px 14px;
+  color: #374151;
+  vertical-align: middle;
+}
+
+/* ── Badges ──────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.badge.dept {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge.desig {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+/* ── Table Action Buttons ────────────────────────────────────────── */
+.btn-edit {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 6px;
+  transition: background 0.2s;
+}
+
+.btn-edit:hover {
+  background: #dbeafe;
+}
+
+.btn-delete {
+  background: #fff1f2;
+  color: #be123c;
+  border: 1px solid #fecdd3;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-delete:hover {
+  background: #ffe4e6;
+}
+
+/* ── Empty State ─────────────────────────────────────────────────── */
+.empty {
+  text-align: center;
+  color: #9ca3af;
+  padding: 40px 0;
+  font-size: 0.95rem;
+}
