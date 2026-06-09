@@ -49,3 +49,91 @@ const onSubmit = async (data) => {
     alert(`Error ${editingId ? "updating" : "saving"} employee: ${error.message}`);
   }
 };
+
+
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/database");
+const Department = require("./Department");
+const Designation = require("./Designation");
+
+const Employee = sequelize.define(
+  "Employee",
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    firstName: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+    },
+    lastName: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+    },
+    age: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        min: 18,
+        max: 60,
+      },
+    },
+    email: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+      unique: true,
+      validate: {
+        isEmail: true,
+      },
+    },
+    departmentId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: Department,
+        key: "id",
+      },
+    },
+    designationId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: Designation,
+        key: "id",
+      },
+    },
+    joiningDate: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+  },
+  {
+    timestamps: false,
+    tableName: "employees",
+  }
+);
+
+// ===== IMPORTANT: ESTABLISH RELATIONSHIPS =====
+Employee.belongsTo(Department, { 
+  foreignKey: "departmentId",
+  as: "department"
+});
+
+Employee.belongsTo(Designation, { 
+  foreignKey: "designationId",
+  as: "designation"
+});
+
+Department.hasMany(Employee, { 
+  foreignKey: "departmentId",
+  as: "employees"
+});
+
+Designation.hasMany(Employee, { 
+  foreignKey: "designationId",
+  as: "employees"
+});
+
+module.exports = Employee;
