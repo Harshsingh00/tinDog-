@@ -1,0 +1,508 @@
+import React from "react";
+import { useState } from "react";
+import { useEffect } from "react";
+import * as z from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+import "./App.css";
+
+// zod validation 
+
+const schema = z.object({
+  firstName: z
+    .string()
+    .min(1, { message: "enter the first name" })
+    .max(15, { message: "name is to long" }),
+  lastName: z
+    .string()
+    .min(1, { message: "enter the last name" })
+    .max(15, { message: "name is to long" }),
+  age: z.coerce
+    .number()
+    .min(18, { message: "enter the age above 18" })
+    .max(60, { message: "60 is maximum age limit" }),
+
+  email: z.email({ pattern: z.regexes.html5Email }),
+  departmentId: z.coerce.number().min(1, { message: "Select a department" }),
+  designationId: z.coerce.number().min(1, { message: "Select a designation" }),
+  joiningDate: z.coerce.date(),
+});
+
+function App() {
+
+// all use-state 
+  
+  const [editingId, setEditingId] = useState(null);
+  const [edit, setEdit] = useState()
+  const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
+  
+  
+  //Create employee form by react hook form
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    setValue,
+  } = useForm({ resolver: zodResolver(schema) });
+  console.log("Form submitted:", {});
+
+// Designations filtered by selected department
+  
+  const filteredDesignations = selectedDepartmentId
+    ? designations.filter((d) => d.departmentId === Number(selectedDepartmentId))
+    : [];
+
+  //posting data into that we fetched from form into db.json
+
+  const [employees, setEmployees] = useState([]);
+
+  // fetching department from the backend
+
+    const fetchDepartments = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/departments");
+      if (!response.ok) throw new Error("Failed to load departments");
+      const data = await response.json();
+      setDepartments(data);
+    } catch (error) {
+      console.error("Error loading departments:", error);
+    }
+  };
+
+  // Fetching designations from the backend
+
+  const fetchDesignations = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/designations");
+      if (!response.ok) throw new Error("Failed to load designations");
+      const data = await response.json();
+      setDesignations(data);
+    } catch (error) {
+      console.error("Error loading designations:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchEmployees();
+    fetchDepartments();
+    fetchDesignations();
+  }, []);
+
+
+  // Helper: get department name by id
+  
+  const getDepartmentName = (departmentId) => {
+    const dept = departments.find((d) => Number(d.id) === departmentId);
+    return dept ? dept.name : "Unknown";
+  };
+
+  // Helper: get designation name by id
+  
+  const getDesignationName = (designationId) => {
+    const desig = designations.find((d) => Number(d.id) === designationId);
+    return desig ? desig.title : "Unknown";
+  };
+  
+  //fetching data that user enter in employee form and adding it to backend
+
+  const onSubmit = async (data) => {
+    try {
+      const url = editingId
+        ? `http://localhost:3001/employees/${editingId}`
+        : "http://localhost:3001/employees";
+
+      const method = editingId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to ${editingId ? "update" : "save"} employee`);
+      }
+
+      const savedData = await response.json();
+      console.log("Data saved:", savedData);
+      alert(`Employee ${editingId ? "updated" : "added"} successfully!`);
+
+      setEditingId(null); // Exit edit mode
+      reset(); // Clear form
+      fetchEmployees(); // Refresh table
+    } catch (error) {
+      console.error("Error:", error);
+      alert(`Error ${editingId ? "updating" : "saving"} employee`);
+    }
+  };
+
+  // Populate form for editing
+  
+  const handleEdit = (employee) => {
+    console.log(employee)
+    setEditingId(employee.id);
+    setValue("firstName", employee.firstName);
+    setValue("lastName", employee.lastName);
+    setValue("age", employee.age);
+    setValue("email", employee.email);
+    setValue("departmentId", Number(employee.departmentId));
+    setValue("designationId", employee.designationId);
+    const date = employee.joiningDate?.slice(0, 16)
+    setValue("joiningDate",(date));
+  };
+
+
+  // put fetched data on table
+  
+  const fetchEmployees = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/employees");
+      if (!response.ok) throw new Error("Failed to load employees");
+
+      const data = await response.json();
+      setEmployees(data);
+    } catch (error) {
+      console.error("Error loading employees:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  // Delete employee
+
+  const deleteEmployee = async (id) => {
+    try {
+      const response = await fetch(`http://localhost:3001/employees/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete employee");
+      }
+
+      alert("Employee deleted successfully!");
+
+      fetchEmployees();
+    } catch (error) {
+      console.error("Error deleting employee:", error);
+      alert("Error deleting employee");
+    }
+  };
+
+
+  const editEmployee = async (id) => {
+    try {
+      const response = await fetch(`http://localhost:3001/employees/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save employee");
+      }
+
+      // const savedData = await response.json();
+      // console.log("Data saved:", savedData);
+      // alert("Employee added successfully!");
+
+      reset();
+
+      fetchEmployees();
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Error saving employee");
+    }
+  };
+
+  return (
+    <div>
+      <div className="bg-gradient-to-r from-cyan-50 via-cyan-100 to-cyan-200 p-8 md:p-12 rounded-3xl shadow-xl text-center">
+        <form
+          className="max-w-md mx-auto bg-cyan-50 p-6 rounded shadow space-y-4"
+          onSubmit={handleSubmit(onSubmit)}
+        >
+          <label className="text-base md:text-l font-mono ">FIRST NAME</label>
+          <input
+            className="w-full bg-transparent placeholder:text-neutral-400 text-cyan-800 text-sm border border-slate-400 rounded-md px-3 py-2 transition duration-300 ease focus:outline-none focus:border-slate-50 hover:border-slate-300 shadow-sm focus:shadow"
+            placeholder="enter first name"
+            {...register("firstName")}
+          />
+          {errors.firstName && <span> {errors.firstName.message}</span>}
+          <br />
+          <label className="text-base md:text-l font-mono">LAST NAME</label>
+          <input
+            className="w-full bg-transparent placeholder:text-neutral-400 text-cyan-800 border border-slate-400 rounded-md px-3 py-2 transition duration-300 ease focus:outline-none focus:border-slate-50 hover:border-slate-300 shadow-sm focus:shadow"
+            placeholder="enter last name"
+            {...register("lastName")}
+          />
+          {errors.lastName && <span> {errors.lastName.message}</span>}
+          <br />
+          <label className="text-base md:text-l font-mono">AGE</label>
+          <input
+            className="w-full bg-transparent placeholder:text-neutral-400 text-cyan-800 border border-slate-400 rounded-md px-3 py-2 transition duration-300 ease focus:outline-none focus:border-slate-50 hover:border-slate-300 shadow-sm focus:shadow"
+            placeholder="enter your age"
+            {...register("age")}
+          />
+          {errors.age && <span> {errors.age.message}</span>}
+          <br />
+          <label className="text-base md:text-l font-mono">EMAIL</label>
+          <input
+            className="w-full bg-transparent placeholder:text-neutral-400 text-cyan-800 border border-slate-400 rounded-md px-3 py-2 transition duration-300 ease focus:outline-none focus:border-slate-50 hover:border-slate-300 shadow-sm focus:shadow"
+            placeholder="enter your mail"
+            {...register("email")}
+          ></input>
+          <br />
+            <label className="text-base font-mono">DEPARTMENT</label>
+          <select
+            className="w-full bg-white text-cyan-800 border border-slate-400 rounded-md px-3 py-2 transition duration-300 ease focus:outline-none hover:border-slate-300 shadow-sm"
+            {...register("departmentId")}
+            onChange={(e) => {
+              setSelectedDepartmentId(e.target.value);
+              
+            }}
+          >
+            <option value=""> Select Department </option>
+            {departments.map((dept) => (
+              <option key={dept.id} value={dept.id}>
+                {dept.name}
+              </option>
+            ))}
+          </select>
+
+          <br />
+          <label className="text-base font-mono">DESIGNATION</label>
+          <select
+            className="w-full bg-white text-cyan-800 border border-slate-400 rounded-md px-3 py-2 transition duration-300 ease focus:outline-none hover:border-slate-300 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            {...register("designationId")}
+            disabled={!selectedDepartmentId}
+          >
+            <option value="">
+              {selectedDepartmentId ? "Select Designation " : " Select a Department first "}
+            </option>
+            {filteredDesignations.map((desig) => (
+              <option key={desig.id} value={desig.id}>
+                {desig.title}
+              </option>
+            ))}
+          </select>
+          <br />
+          <label className="text-base md:text-l font-mono">JOINING DATE</label>
+          <input
+            className="w-full bg-transparent placeholder:text-neutral-400 text-cyan-800 border border-slate-400 rounded-md px-3 py-2 transition duration-300 ease focus:outline-none focus:border-slate-50 hover:border-slate-300 shadow-sm focus:shadow"
+            type="datetime-local"
+            {...register("joiningDate")}
+          ></input>
+          {errors.age && <p>Please enter number for age.</p>}
+          <input
+            className="w-full bg-cyan-600 text-white py-2 px-4 rounded
+          hover:bg-cyan-900 transition"
+            type="submit"
+             value={editingId ? "Update Employee" : "Add Employee"}
+          />
+        </form>
+
+        <div className="overflow-x-auto relative p-10">
+          <table className="min-w-full text-sm text-left text-gray-700 font-mono">
+            <thead className="text-xs text-white uppercase bg-cyan-600">
+              <tr>
+                <th scope="col" className="px-6 py-3">
+                  FIRSTNAME
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  LAST NAME
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  AGE
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  EMIAL
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  DEPARTMENT
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  DESIGNATION
+                </th>
+                <th scope="col" className="px-6 py-3">
+                  JOINING-DATE
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {employees.map((emp) => (
+                <tr
+                  className="bg-cyan-50 border-b border-gray-100"
+                  key={emp.id}
+                >
+                  <td className="px-6 py-4">{emp.firstName}</td>
+                  <td className="px-6 py-4">{emp.lastName}</td>
+                  <td className="px-6 py-4">{emp.age}</td>
+                  <td className="px-6 py-4">{emp.email}</td>
+                  <td className="px-6 py-4">{getDepartmentName(Number(emp.departmentId))}</td>
+                  <td className="px-6 py-4">{getDesignationName(Number(emp.designationId))}</td>
+                  <td className="px-6 py-4">{emp.joiningDate.slice(0, 16)}</td>
+                  <td>
+                    <button
+                      onClick={() => deleteEmployee(emp.id)}
+                      type="button"
+                      className="w-full bg-cyan-600 text-white py-2 px-4 rounded
+          hover:bg-cyan-900 transition"
+                    >
+                      DELETE
+                    </button>
+                    <button
+                      onClick={() =>  handleEdit(emp)}
+                      type="button"
+                      className="w-full bg-cyan-600 text-white py-2 px-4 rounded
+          hover:bg-cyan-900 transition"
+                    >
+                      EDIT
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+
+
+
+app css
+
+* Tailwind CSS is used for styling (already in package.json) */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+
+index.js
+
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+
+
+index.css
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+    'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+
+
+
+package json
+
+
+{
+  "name": "employee-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "react-hook-form": "^7.45.0",
+    "zod": "^3.21.0",
+    "@hookform/resolvers": "^3.1.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.3.0"
+  }
+}
+
+
+tailwind config js
+
+
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+
+one index.html empty file
