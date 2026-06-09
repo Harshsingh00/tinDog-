@@ -1,0 +1,51 @@
+// FIXED onSubmit function - Replace your old one with this
+
+const onSubmit = async (data) => {
+  try {
+    // Convert age to number
+    const finalData = {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      age: Number(data.age),  // Make sure it's a number
+      email: data.email,
+      departmentId: Number(data.departmentId),  // Convert to number
+      designationId: Number(data.designationId),  // Convert to number
+      joiningDate: new Date(data.joiningDate).toISOString()  // Convert to ISO format
+    };
+
+    console.log("Sending data to backend:", finalData);  // Debug log
+
+    const url = editingId
+      ? `http://localhost:3001/employees/${editingId}`
+      : "http://localhost:3001/employees";
+
+    const method = editingId ? "PUT" : "POST";
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(finalData),
+    });
+
+    console.log("Response status:", response.status);  // Debug log
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Server error response:", errorData);  // Debug log
+      throw new Error(`Failed to ${editingId ? "update" : "save"} employee`);
+    }
+
+    const savedData = await response.json();
+    console.log("Data saved:", savedData);
+    alert(`Employee ${editingId ? "updated" : "added"} successfully!`);
+
+    setEditingId(null);
+    reset();
+    fetchEmployees();
+  } catch (error) {
+    console.error("Error:", error);
+    alert(`Error ${editingId ? "updating" : "saving"} employee: ${error.message}`);
+  }
+};
